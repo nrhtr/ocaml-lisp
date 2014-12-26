@@ -22,13 +22,6 @@ let rec print_expr = function
 
 let print_exprn e = print_expr e; print_string "\n"
 
-let int_binop op exprs =
-    List.reduce_exn ~f:(fun a b ->
-        match (a,b) with
-        | (Atom (Integer x), Atom (Integer y)) -> Atom (Integer (op x y))
-        | _ -> raise (Failure "BinOp: Expected 2 integer arguments");
-    ) exprs
-
 let rec eval_list = function
     | [] -> Atom Nil
     | Atom a :: exprs -> begin match a with
@@ -64,6 +57,15 @@ and eval = function
     (*
     | _ -> raise (Failure "Unsupported expression");
     *)
+and int_binop op exprs =
+    List.reduce_exn ~f:(fun a b ->
+        match a, b with
+        | Atom (Integer x), Atom (Integer y) -> Atom (Integer (op x y))
+        | x, y -> begin match (eval x, eval y) with
+            | Atom (Integer x'), Atom (Integer y') -> Atom (Integer (op x' y'))
+            | _ -> raise (Failure "BinOp: Expected 2 integer arguments");
+        end
+    ) exprs
 
 type token =
     | Open
@@ -105,3 +107,13 @@ and lex_symbol buffer =
         | [< ' ('a' .. 'z' as c); stream >] -> lex_into_buffer ~f:lex_symbol ~next:c ~buffer stream
         | [< stream=lex >] ->
                 [< 'Symbol (Buffer.contents buffer); stream >]
+
+let rec parse: token Stream.t -> sexpr =
+    parser
+        | [< 'Open; stream >] -> parse_list [] stream
+        | [< 'Integer n>] -> Atom (Integer n)
+        | [< 'Symbol  s>] -> Atom (Symbol s)
+and parse_list acc =
+    parser
+        | [< 'Close; stream >] -> List (List.rev acc)
+        | [< e=parse; stream >] -> parse_list (e :: acc) stream
